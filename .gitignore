@@ -1,3 +1,8 @@
+**/obj/
+**/bin/
+db.sqlite
+.git
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
