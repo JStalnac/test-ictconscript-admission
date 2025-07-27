@@ -66,10 +66,12 @@ let main args =
         use storage =
             scope.ServiceProvider.GetRequiredService<StorageContext>()
         initDb storage
+        let loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+        let logger = loggerFactory.CreateLogger("Logbook")
         let sampleData =
             scope.ServiceProvider.GetRequiredService<IConfiguration>()
                 .GetValue("SampleData")
-        populateSampleEntries storage sampleData
+        populateSampleEntries storage logger sampleData
     )
 
     app.MapOpenApi() |> ignore
