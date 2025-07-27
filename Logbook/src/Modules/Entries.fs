@@ -2,6 +2,7 @@ module Logbook.Entries
 
 open System
 open System.Text.Json
+open System.Text.Json.Serialization
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging
 open Microsoft.AspNetCore.Http
@@ -18,16 +19,21 @@ module All =
 
         let entries =
             storage.Connection
-            |> Db.newCommand "SELECT * FROM entries"
+            |> Db.newCommand "SELECT * FROM entries ORDER BY isoTime DESC"
             |> Db.query Entry.ofDataReader
 
         Response.ofJson entries ctx
 
 module Create =
     type Model = {
+        [<JsonPropertyName("title")>]
         Title : string
+        [<JsonPropertyName("body")>]
         Body : string
-        Location : (float * float) option
+        [<JsonPropertyName("lat")>]
+        Latitude : float option
+        [<JsonPropertyName("lon")>]
+        Longitude : float option
     }
 
     let validateModel title body lat lon =
@@ -79,26 +85,21 @@ module Create =
 
         match valid with
         | Valid ->
-            let location =
-                match lat, lon with
-                | Ok (Some lat), Ok (Some lon) ->
-                    Some (lat, lon)
-                | Ok None, Ok None ->
-                    None
-                | _ -> failwith "unreachable"
             Ok {
                 Title = title |> unwrap
                 Body = body |> unwrap
-                Location = location
+                Latitude = lat |> unwrap
+                Longitude = lon |> unwrap
             }
         | Invalid errors -> Error errors
 
     let post (ctx : HttpContext) =
         let logger = getLogger ctx "Logbook.Entries.Create"
 
-        // TODO: Wrap System.Text.Json API? (functional)
-        ctx |> Request.validateJson
+        ctx
+        |> Request.validateJson
             (fun (body : JsonDocument) ->
+                use body = body
                 let root = body.RootElement
                 let title = 
                     match root.TryGetProperty("title") with
@@ -111,17 +112,21 @@ module Create =
                 let lat = 
                     match root.TryGetProperty("lat") with
                     | true, prop ->
-                        match prop.TryGetDouble() with
-                        | true, lon -> Ok (Some lon)
-                        | false, _ -> Error "'lat' must be float"
+                        let mutable lat = 0.0
+                        match prop.ValueKind with
+                        | JsonValueKind.Number when prop.TryGetDouble(&lat) ->
+                            Ok (Some lat)
+                        | _ -> Error "'lat' must be float"
                     | false, _ ->
                         Ok None
                 let lon = 
                     match root.TryGetProperty("lon") with
                     | true, prop ->
-                        match prop.TryGetDouble() with
-                        | true, lon -> Ok (Some lon)
-                        | false, _ -> Error "'lon' must be float"
+                        let mutable lon = 0.0
+                        match prop.ValueKind with
+                        | JsonValueKind.Number when prop.TryGetDouble(&lon) ->
+                            Ok (Some lon)
+                        | _ -> Error "'lon' must be float"
                     | false, _ ->
                         Ok None
                 validateModel title body lat lon)
@@ -132,24 +137,22 @@ module Create =
                     fun ctx ->
                         use storage =
                             ctx.RequestServices.GetRequiredService<StorageContext>()
-                        let lat, lon =
-                            match model.Location with
-                            | Some (lat, lon) -> sqlDouble lat, sqlDouble lon
-                            | None -> SqlType.Null, SqlType.Null
                         let time = DateTime.UtcNow
                         let id = 
                             storage.Connection
-                            |> Db.newCommand
-                                "INSERT INTO entries(title, body, isotime, lat, lon) VALUES (@title, @body, @isotime, @lat, @lon) RETURNING id"
-                            |> Db.setParams [
+                            |> Db.newCommand (
+                                "INSERT INTO entries(title, body, isotime, lat, lon) " +
+                                "VALUES (@title, @body, @isotime, @lat, @lon) " +
+                                "RETURNING id"
+                            ) |> Db.setParams [
                                     "title", sqlString model.Title
                                     "body", sqlString model.Body
                                     "isotime",
                                         time
                                         |> Entry.dateTimeToString
                                         |> sqlString
-                                    "lat", lat
-                                    "lon", lon
+                                    "lat", sqlDoubleOrNull model.Latitude
+                                    "lon", sqlDoubleOrNull model.Longitude
                                 ]
                             |> Db.querySingle (fun read -> read.ReadInt32("id"))
                             |> Option.get
@@ -163,8 +166,8 @@ module Create =
                                 time
                                 |> Entry.dateTimeToString
                                 |> Entry.stringToDateTime
-                            Latitude = None // TODO: Location
-                            Longitude = None
+                            Latitude = model.Latitude
+                            Longitude = model.Longitude
                         }
                         ctx |> Response.ofJson entry
                 | Error errors ->
@@ -174,8 +177,10 @@ module Create =
 module Single =
     let get (ctx : HttpContext) =
         let route = Request.getRoute ctx
-        // TODO: This throws error
         let id = route.GetInt32("id")
+
+        let logger = getLogger ctx "Entries.Single.get"
+        logger.LogInformation("Searching for entry {Id}", id)
 
         use storage = 
             ctx.RequestServices.GetRequiredService<StorageContext>()
@@ -184,8 +189,8 @@ module Single =
             storage.Connection
             |> Db.newCommand "SELECT * FROM entries WHERE id = @id"
             |> Db.setParams [
-                "id", sqlInt32 id
-            ]
+                    "id", sqlInt32 id
+                ]
             |> Db.querySingle Entry.ofDataReader
 
         match entry with
@@ -193,5 +198,5 @@ module Single =
             Response.ofJson entry ctx
         | None ->
             (Response.withStatusCode StatusCodes.Status404NotFound
-            >> Response.ofJson { Message = "Entry not found"; Errors = [] })
+            >> Response.ofJson (errorMessage "Entry not found"))
                 ctx

@@ -1,5 +1,6 @@
 open System.Data
 open Microsoft.Extensions.Configuration
+open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
@@ -10,7 +11,6 @@ open Falco.OpenApi
 open Logbook
 open Logbook.Model
 open Logbook.Storage
-open Microsoft.AspNetCore.Http.Json
 
 let notFound msg =
     Response.withStatusCode 404
@@ -23,8 +23,9 @@ let routes = [
         post "/entries" Entries.Create.post
             |> OpenApi.name "CreateLogbookEntry"
             |> OpenApi.summary "Create a new logbook entry"
-            |> OpenApi.acceptsType typeof<Entries.Create.Model> // TODO: This type is not right
-        get "/entries/{id}" Entries.Single.get
+            |> OpenApi.acceptsType typeof<Entries.Create.Model>
+            |> OpenApi.returnType typeof<Entry>
+        get "/entries/{id:int}" Entries.Single.get
             |> OpenApi.name "GetLogbookEntry"
             |> OpenApi.summary "Get a logbook entry"
             |> OpenApi.route [
