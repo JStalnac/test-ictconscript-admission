@@ -1,4 +1,14 @@
 # ICT Conscript Admission Test
+
+The service is deployed at https://test-ictconscript-admission-5aht.onrender.com
+
+OpenAPI documentation with SwaggerUI:
+https://test-ictconscript-admission-5aht.onrender.com/swagger/index.html
+
+
+-------
+
+
 Thank you for taking interest in applying into our ICT Conscript Program. 
 
 In this repository you will find our **Admission Test** to the program. 
