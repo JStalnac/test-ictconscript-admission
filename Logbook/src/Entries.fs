@@ -12,8 +12,8 @@ open Logbook.Model
 open Logbook.Validation
 open Logbook.Storage
 
-module All =
-    let get (ctx : HttpContext)=
+module Read =
+    let getAll (ctx : HttpContext)=
         use storage =
             ctx.RequestServices.GetRequiredService<StorageContext>()
 
@@ -23,6 +23,32 @@ module All =
             |> Db.query Entry.ofDataReader
 
         Response.ofJson entries ctx
+
+    let get (ctx : HttpContext) =
+        let route = Request.getRoute ctx
+        let id = route.GetInt32("id")
+
+        let logger = getLogger ctx "Entries.Single.get"
+        logger.LogInformation("Searching for entry {Id}", id)
+
+        use storage = 
+            ctx.RequestServices.GetRequiredService<StorageContext>()
+
+        let entry =
+            storage.Connection
+            |> Db.newCommand "SELECT * FROM entries WHERE id = @id"
+            |> Db.setParams [
+                    "id", sqlInt32 id
+                ]
+            |> Db.querySingle Entry.ofDataReader
+
+        match entry with
+        | Some entry ->
+            Response.ofJson entry ctx
+        | None ->
+            (Response.withStatusCode StatusCodes.Status404NotFound
+            >> Response.ofJson (errorMessage "Entry not found"))
+                ctx
 
 module Create =
     type Model = {
@@ -129,11 +155,12 @@ module Create =
                         | _ -> Error "'lon' must be float"
                     | false, _ ->
                         Ok None
+
                 validateModel title body lat lon)
             (fun res ->
                 match res with
                 | Ok model ->
-                    logger.LogInformation("Request body: {Body}", sprintf "%A" model)
+                    logger.LogInformation("Creating new entry: {Body}", sprintf "%A" model)
                     fun ctx ->
                         use storage =
                             ctx.RequestServices.GetRequiredService<StorageContext>()
@@ -169,34 +196,8 @@ module Create =
                             Latitude = model.Latitude
                             Longitude = model.Longitude
                         }
+                        logger.LogInformation("New entry created: {Entry}", sprintf "%A" entry)
                         ctx |> Response.ofJson entry
                 | Error errors ->
                     Response.withStatusCode StatusCodes.Status400BadRequest
                     >> Response.ofJson (errorMessageWithErrors "Invalid request" errors))
-
-module Single =
-    let get (ctx : HttpContext) =
-        let route = Request.getRoute ctx
-        let id = route.GetInt32("id")
-
-        let logger = getLogger ctx "Entries.Single.get"
-        logger.LogInformation("Searching for entry {Id}", id)
-
-        use storage = 
-            ctx.RequestServices.GetRequiredService<StorageContext>()
-
-        let entry =
-            storage.Connection
-            |> Db.newCommand "SELECT * FROM entries WHERE id = @id"
-            |> Db.setParams [
-                    "id", sqlInt32 id
-                ]
-            |> Db.querySingle Entry.ofDataReader
-
-        match entry with
-        | Some entry ->
-            Response.ofJson entry ctx
-        | None ->
-            (Response.withStatusCode StatusCodes.Status404NotFound
-            >> Response.ofJson (errorMessage "Entry not found"))
-                ctx

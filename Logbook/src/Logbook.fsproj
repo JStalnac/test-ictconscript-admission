@@ -9,7 +9,7 @@
     <Compile Include="Validation.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="Storage.fs" />
-    <Compile Include="Modules/Entries.fs" />
+    <Compile Include="Entries.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

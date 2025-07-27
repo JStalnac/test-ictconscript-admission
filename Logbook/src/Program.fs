@@ -4,6 +4,7 @@ open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Hosting
 open Microsoft.Data.Sqlite
 open Falco
 open Falco.Routing
@@ -12,12 +13,8 @@ open Logbook
 open Logbook.Model
 open Logbook.Storage
 
-let notFound msg =
-    Response.withStatusCode 404
-    >> Response.ofJson { Message = msg; Errors = [] }
-
 let routes = [
-        get "/entries" Entries.All.get
+        get "/entries" Entries.Read.getAll
             |> OpenApi.name "GetLogbookEntries"
             |> OpenApi.summary "Get all logbook entries"
         post "/entries" Entries.Create.post
@@ -25,7 +22,7 @@ let routes = [
             |> OpenApi.summary "Create a new logbook entry"
             |> OpenApi.acceptsType typeof<Entries.Create.Model>
             |> OpenApi.returnType typeof<Entry>
-        get "/entries/{id:int}" Entries.Single.get
+        get "/entries/{id:int}" Entries.Read.get
             |> OpenApi.name "GetLogbookEntry"
             |> OpenApi.summary "Get a logbook entry"
             |> OpenApi.route [
@@ -55,9 +52,11 @@ let configureServices (services : IServiceCollection) =
         .AddFalcoOpenApi()
         |> ignore
 
+
 [<EntryPoint>]
 let main args =
     let builder = WebApplication.CreateBuilder(args)
+    builder.WebHost.UseUrls("http://localhost:8000") |> ignore
     configureServices builder.Services
 
     let app = builder.Build()
@@ -88,6 +87,8 @@ let main args =
         .UseFalco(routes)
         |> ignore
 
-    app.Run(notFound "Not found")
+    app.Run(
+        Response.withStatusCode StatusCodes.Status404NotFound
+        >> Response.ofJson (errorMessage "Not found"))
 
     0
