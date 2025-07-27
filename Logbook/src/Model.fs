@@ -2,15 +2,22 @@ namespace Logbook.Model
 
 open System
 open System.Data
+open System.Text.Json.Serialization
 open System.Globalization
 open Donald
 
 type Entry = {
+    [<JsonPropertyName("id")>]
     Id : int
+    [<JsonPropertyName("title")>]
     Title : string
+    [<JsonPropertyName("body")>]
     Body : string
+    [<JsonPropertyName("isoTime")>]
     IsoTime : DateTime
+    [<JsonPropertyName("lat")>]
     Latitude : float option
+    [<JsonPropertyName("lon")>]
     Longitude : float option
 }
 
@@ -33,6 +40,9 @@ module Entry =
         }
 
 type ErrorMessage = {
+    [<JsonPropertyName("message")>]
     Message : string
+    [<JsonPropertyName("errors")>]
+    [<JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)>]
     Errors : string list
 }
