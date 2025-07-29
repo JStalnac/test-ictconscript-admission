@@ -56,8 +56,7 @@ let configureServices (services : IServiceCollection) =
 [<EntryPoint>]
 let main args =
     let builder = WebApplication.CreateBuilder(args)
-    builder.WebHost.UseKestrel(fun opts ->
-        opts.ListenAnyIP(8000)) |> ignore
+    builder.WebHost.UseUrls("http://*:8000") |> ignore
     configureServices builder.Services
 
     let app = builder.Build()
